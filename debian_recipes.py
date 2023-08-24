@@ -10,7 +10,8 @@
 
 version_number = '0.1'
 
-import os, argparse, hashlib, re, sys, shutil, crypt, datetime, time
+import os, argparse, hashlib, re, sys, shutil, crypt, datetime, time, random
+
 
 class vbox:
 	def __init__(self, binary_path='/usr/bin/vboxmanage'):
@@ -182,9 +183,9 @@ parser.add_argument('--keep', default=False, help='Keep the Virtual Machine afte
 parser.add_argument('--list-versions', help='Shows the available Debian versions and exit.', action='store_true')
 parser.add_argument('--vm-hostname', metavar='', help='Config the VM hostname. (Default value: \'debian\')', default='debian')
 parser.add_argument('--vm-password', metavar='', help='Config the VM root password. (Default value: \'toor\')', default='toor')
-parser.add_argument('--vm-ip', metavar='', help='Config the VM IP address in the format \'1.2.3.4/24\'. (Default value: \'dhcp\')', default=None)
-parser.add_argument('--vm-gateway', metavar='', help='Config the VM Gateway address. (Default value: \'dhcp\')', default=None)
-parser.add_argument('--vm-dns', metavar='', help='Config the VM DNS address, only one address is allowed. (Default value: \'dhcp\')', default=None)
+parser.add_argument('--vm-ip', metavar='', help='Config the VM IP address in the format \'1.2.3.4/24\'. (By default uses DHCP)', default=None)
+parser.add_argument('--vm-gateway', metavar='', help='Config the VM Gateway address. (By default uses DHCP)', default=None)
+parser.add_argument('--vm-dns', metavar='', help='Config the VM DNS address, only one address is allowed. (By default uses DHCP)', default=None)
 parser.add_argument('--version', help='Shows the version number and exit', action='version', default=argparse.SUPPRESS, version=f"%(prog)s {version_number}")
 parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Show this help message and exit.')
 
@@ -241,8 +242,10 @@ try:
 	if exec(f"qemu-img convert -f qcow2 {image_file} -O vdi '{vm_name}/disk.vdi'").returncode != 0:
 		raise Exception("Impossible to generate the VM disk!")
 
+	serial_port = str(9000 + random.randrange(0, 1000))
+
 	vbox.modifyvm[vm_uuid](boot1='disk', memory=args.memory, cpus=args.vcpu, nic1='bridged', nic_type1='virtio', bridge_adapter1=args.network_device)
-	vbox.modifyvm[vm_uuid](uart1=['0x3F8', '4'], uart_mode1=['tcpserver', '12345'])
+	vbox.modifyvm[vm_uuid](uart1=['0x3F8', '4'], uart_mode1=['tcpserver', serial_port])
 	vbox.storagectl[vm_uuid](add='scsi', name='SCSI', controller='buslogic')
 	vbox.storageattach[vm_uuid](storagectl='SCSI', type='hdd', port=1, medium=f"{vm_name}/disk.vdi")
 	
@@ -279,7 +282,7 @@ try:
 
 	elif args.interface == 'serial':
 		vbox.startvm[vm_uuid](type='headless')
-		exec("telnet localhost 12345", capture=False)
+		exec(f"telnet localhost {serial_port}", capture=False)
 		try:
 			vbox.controlvm[vm_uuid].poweroff()
 		except:
